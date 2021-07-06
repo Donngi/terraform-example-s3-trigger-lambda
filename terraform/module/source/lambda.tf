@@ -23,6 +23,12 @@ resource "aws_lambda_function" "transporter" {
   }
 
   timeout = 29
+
+  environment {
+    variables = {
+      REPLICA_S3_NAME = var.replica_s3_name
+    }
+  }
 }
 
 # ------------------------------------------------------------
@@ -42,7 +48,7 @@ resource "aws_lambda_permission" "transporter" {
 # ------------------------------------------------------------
 
 resource "aws_iam_role" "lambda_transporter" {
-  name = "SampleLambdaRole"
+  name = "LambdaTransporterRole"
 
   assume_role_policy = jsonencode(
     {
@@ -60,6 +66,37 @@ resource "aws_iam_role" "lambda_transporter" {
   )
 }
 
+# Allow access to source s3 bucket
+resource "aws_iam_policy" "lambda_source_s3_access" {
+  name        = "LambdaSourceS3AccessPolicy"
+  description = "Allow lambda to access to specific s3 bucket"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "s3:GetObject",
+        ]
+        Effect   = "Allow"
+        Resource = "${aws_s3_bucket.source.arn}/*"
+      },
+      {
+        Action = [
+          "s3:ListBucket",
+        ]
+        Effect   = "Allow"
+        Resource = "*"
+      },
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_source_s3_access" {
+  role       = aws_iam_role.lambda_transporter.name
+  policy_arn = aws_iam_policy.lambda_source_s3_access.arn
+}
+
 # Allow access to replica s3 bucket
 resource "aws_iam_policy" "lambda_replica_s3_access" {
   name        = "LambdaReplicaS3AccessPolicy"
@@ -73,7 +110,7 @@ resource "aws_iam_policy" "lambda_replica_s3_access" {
           "s3:PutObject",
         ]
         Effect   = "Allow"
-        Resource = var.replica_s3_arn
+        Resource = "${var.replica_s3_arn}/*"
       },
       {
         Action = [
